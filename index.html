@@ -917,36 +917,83 @@ async function analyzeBeeImage(file) {
     resultBox.textContent = "";
 
     const formData = new FormData();
-    formData.append("image", file);
+    
+const reader = new FileReader();
 
-    const response = await fetch(
-      `${BEE_API_URL}/analyze`,
-      {
-        method: "POST",
-        body: formData
+const imageData = await new Promise((resolve, reject) => {
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error("تعذرت قراءة الصورة"));
+  reader.readAsDataURL(file);
+});
+
+const imagePayload = {
+  image: imageData,
+  mimeType: file.type || "image/jpeg"
+};
+
+message.textContent = "جارٍ التحقق من الصورة...";
+resultBox.hidden = false;
+resultBox.textContent = "";
+
+const checkResponse = await fetch(
+  `${BEE_API_URL}/api/analyze`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      ...imagePayload,
+      stage: 1
+    })
+  }
+);
+
+const checkResult = await checkResponse.json();
+
+if (!checkResponse.ok || checkResult.isBee !== true) {
+  resultBox.textContent =
+    checkResult.message ||
+    "هذه الصورة لا تبدو صورة خلية نحل. اختاري صورة مناسبة.";
+  message.textContent = "لم يتم قبول الصورة";
+  return;
+}
+
+message.textContent = "تم التحقق من الصورة، جارٍ تحليلها...";
+
+const analysisResponse = await fetch(
+  `${BEE_API_URL}/api/analyze`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      ...imagePayload,
+      stage: 2,
+      v: {
+        category: checkResult.category
       }
-    );
+    })
+  }
+);
 
-    const result = await response.json();
+const analysisResult = await analysisResponse.json();
 
-    if (!response.ok) {
-      throw new Error(
-        result.message || "تعذر تحليل الصورة."
-      );
-    }
+if (!analysisResponse.ok) {
+  throw new Error(
+    analysisResult.message ||
+    analysisResult.error ||
+    "تعذر تحليل الصورة"
+  );
+}
 
-    if (result.isBee !== true) {
-      resultBox.textContent =
-        "هذه الصورة لا تبدو صورة نحل أو خلية نحل. " +
-        "لن يتم عرض نتائج تحليل لها. يرجى اختيار صورة تخص النحل.";
-      message.textContent = "لم يتم قبول الصورة";
-      return;
-    }
+resultBox.textContent =
+  typeof analysisResult.analysis === "string"
+    ? analysisResult.analysis
+    : JSON.stringify(analysisResult.analysis, null, 2);
 
-    resultBox.textContent =
-      result.analysis || "تم التحقق من الصورة.";
-
-    message.textContent = "اكتمل تحليل الصورة.";
+message.textContent = "اكتمل تحليل الصورة.";
 
   } catch (error) {
     resultBox.textContent =
