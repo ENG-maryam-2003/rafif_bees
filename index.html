@@ -888,6 +888,90 @@ function stHist(){const box=$('#st-hist'),i=$('#st-h').value,h=H[+i];if(i===''||
  $('#st-rep').onclick=()=>report(h)}
 const _go=go;go=n=>{_go(n);if(n==='story'){stHives();STM('')}else stStop()};
 stHives();
+ 
+const BEE_API_URL = "https://rafif-api.onrender.com";
+
+async function analyzeBeeImage(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    alert("يرجى اختيار صورة صالحة.");
+    return;
+  }
+
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ];
+
+  if (!allowedTypes.includes(file.type)) {
+    alert("يرجى اختيار صورة بصيغة JPG أو PNG أو WEBP.");
+    return;
+  }
+
+  const message = document.getElementById("camMsg");
+  const resultBox = document.getElementById("ai");
+
+  try {
+    message.textContent = "جارٍ التحقق من الصورة...";
+    resultBox.hidden = false;
+    resultBox.textContent = "";
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch(
+      `${BEE_API_URL}/analyze`,
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.message || "تعذر تحليل الصورة."
+      );
+    }
+
+    if (result.isBee !== true) {
+      resultBox.textContent =
+        "هذه الصورة لا تبدو صورة نحل أو خلية نحل. " +
+        "لن يتم عرض نتائج تحليل لها. يرجى اختيار صورة تخص النحل.";
+      message.textContent = "لم يتم قبول الصورة";
+      return;
+    }
+
+    resultBox.textContent =
+      result.analysis || "تم التحقق من الصورة.";
+
+    message.textContent = "اكتمل تحليل الصورة.";
+
+  } catch (error) {
+    resultBox.textContent =
+      error.message ||
+      "تعذر الاتصال بخادم التحليل. حاولي مرة أخرى.";
+
+    message.textContent = "تعذر إكمال التحليل.";
+  }
+}
+
+// رفع صورة من الاستوديو
+document.getElementById("pickb")?.addEventListener(
+  "click",
+  () => document.getElementById("pick")?.click()
+);
+
+document.getElementById("pick")?.addEventListener(
+  "change",
+  async (event) => {
+    const file = event.target.files?.[0];
+    if (file) await analyzeBeeImage(file);
+    event.target.value = "";
+  }
+);
+
 </script>
 </body>
 </html>
