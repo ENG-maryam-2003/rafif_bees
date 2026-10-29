@@ -429,7 +429,7 @@ $('#close').onclick=stop;
 /* ===== فحص الخلية بالصور: تحقق ثم تحليل ===== */
 let AI=null,PEND=null,ACTL=null;
 /* لتشغيل التحليل خارج Claude: ضع رابط خادمك هنا (انظر rafif-api/README.md). اتركه فارغًا لاستخدام خدمة Claude المدمجة. */
-const API_URL='';
+const API_URL='https://rafif-api.onrender.com';
 const API_BASE=API_URL==='__SAME_ORIGIN__'?(/^https?:$/.test(location.protocol)?location.origin:''):API_URL;
 const apiOn=()=>/^https?:\/\//.test(API_BASE);
 const aurl=p=>API_BASE.replace(/\/$/,'')+p;
