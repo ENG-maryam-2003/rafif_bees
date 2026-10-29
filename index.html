@@ -439,8 +439,21 @@ const netMsg=e=>{const c=e&&e.code;return c==='rate_limited'?'وصلت إلى ح
 const noApiMsg=()=>/^https?:$/.test(location.protocol)?'خدمة التحليل غير مربوطة: ضع رابط الخادم في API_URL داخل الملف (انظر README).':'أنت تفتح التطبيق كملف من هاتفك ('+location.protocol+'). افتح رابط التطبيق المنشور (https) ليعمل تحليل الصور.';
 function b64(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(b)})}
 async function askAI(stage,b,v,sig){
- if(apiOn()){const image=await b64(b);let r;try{r=await fetch(aurl('/api/analyze'),{method:'POST',headers:{'Content-Type':'application/json',...authH()},body:JSON.stringify({stage,image,v}),signal:sig})}catch(e){if(sig&&sig.aborted)throw e;const er=new Error('net');er.code='net';throw er}
-  let j={};try{j=await r.json()}catch(e){}if(!r.ok||typeof j.text!=='string'){const er=new Error('net');er.code=j.error||'net';throw er}return{text:j.text}}
+ if(apiOn()){
+  const image=await b64(b);let r;
+  try{
+   r=await fetch(aurl('/api/analyze'),{method:'POST',headers:{'Content-Type':'application/json',...authH()},body:JSON.stringify({stage,image,v,mimeType:'image/jpeg'}),signal:sig});
+  }catch(e){if(sig&&sig.aborted)throw e;const er=new Error('net');er.code='net';throw er}
+  let j={};try{j=await r.json()}catch(e){}
+  if(!r.ok){const er=new Error(j.message||j.error||'net');er.code=j.error||'net';throw er}
+  // تكييف شكل رد خادم rafif-api مع الشكل الذي تتوقعه واجهة الموقع.
+  if(stage===1){
+   const recognized={category:j.category||'unclear',recognition_confidence:Number(j.recognition_confidence??0),quality:j.quality||{level:'poor',issues:[]},visible_parts:Array.isArray(j.visible_parts)?j.visible_parts:[],reason:j.message||'تعذر التحقق من الصورة.'};
+   return {text:JSON.stringify(recognized)};
+  }
+  if(j.analysis&&typeof j.analysis==='object')return {text:JSON.stringify(j.analysis)};
+  const er=new Error('bad_response');er.code='bad_response';throw er;
+ }
  return AI(stage===1?P1:p2(v),{images:[b],modelTier:'default',cache:false,signal:sig})}
 (async()=>{try{const s=await claude.use('sample');if(s&&(await s.limits()).images)AI=s}catch(e){}})();
 const esc=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
@@ -473,7 +486,7 @@ async function runAnalysis(){if(!PEND)return;const {b}=PEND;LR=null;$('#svbox').
  const prog=t=>{$('#ai').innerHTML=pv(PEND.url)+'<div class="spin" role="status" aria-label="جارٍ التحليل"></div><p id="ait">'+t+'</p><button class="btn" id="an-x" style="background:#3a2a14;color:#fff">إلغاء</button>';$('#an-x').onclick=()=>ACTL.abort()};
  prog('المرحلة 1 من 2: التحقق من أن الصورة لخلية نحل…');
  if(!AI&&!apiOn()){failBox(noApiMsg(),false);return}
- let v;try{const r=await askAI(1,b,null,sig);v=jparse(r.text)}catch(e){if(sig.aborted){failBox('تم إلغاء التحليل.',true)}else if(e&&e.message==='json'||e instanceof SyntaxError){failBox(MSG.unsure,true)}else{failBox('تعذّر الاتصال بخدمة التحليل. تحقق من الاتصال وحاول مرة أخرى.',true)}return}
+ let v;try{const r=await askAI(1,b,null,sig);v=jparse(r.text)}catch(e){if(sig.aborted){failBox('تم إلغاء التحليل.',true)}else if(e&&e.message==='json'||e instanceof SyntaxError){failBox(MSG.unsure,true)}else{failBox(e&&e.code==='analysis_not_configured'?'مفتاح تحليل الصور غير مضبوط على الخادم.':e&&e.code==='upstream_failed'?'تعذّر على الخادم تحليل الصورة. حاولي مرة أخرى.':e&&e.code==='bad_response'?'ردّ الخادم غير متوافق مع الصفحة.':e&&e.message==='net'?'تعذّر الاتصال بخدمة التحليل. تحقق من الاتصال وحاول مرة أخرى.':(e&&e.message&&e.message!=='net'?e.message:'تعذّر الاتصال بخدمة التحليل. تحقق من الاتصال وحاول مرة أخرى.'),true)}return}
  const g=gate(v);if(!g.ok){failBox(g.m,false);return}
  prog('المرحلة 2 من 2: تحليل العلامات المرئية…');
  let d;try{const r=await askAI(2,b,v,sig);d=jparse(r.text);if(!d||typeof d.summary!=='string'||!d.strength||!d.chalkbrood||!Array.isArray(d.findings||[]))throw new Error('json')}catch(e){if(sig.aborted){failBox('تم إلغاء التحليل.',true)}else if(e&&e.message==='json'||e instanceof SyntaxError){failBox('لم نتمكن من قراءة نتيجة التحليل. حاول مرة أخرى بصورة أوضح.',true)}else{failBox('تعذّر الاتصال بخدمة التحليل. تحقق من الاتصال وحاول مرة أخرى.',true)}return}
@@ -889,136 +902,9 @@ function stHist(){const box=$('#st-hist'),i=$('#st-h').value,h=H[+i];if(i===''||
 const _go=go;go=n=>{_go(n);if(n==='story'){stHives();STM('')}else stStop()};
 stHives();
  
-const BEE_API_URL = "https://rafif-api.onrender.com";
 
-async function analyzeBeeImage(file) {
-  if (!file || !file.type.startsWith("image/")) {
-    alert("يرجى اختيار صورة صالحة.");
-    return;
-  }
-
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/webp"
-  ];
-
-  if (!allowedTypes.includes(file.type)) {
-    alert("يرجى اختيار صورة بصيغة JPG أو PNG أو WEBP.");
-    return;
-  }
-
-  const message = document.getElementById("camMsg");
-  const resultBox = document.getElementById("ai");
-
-  try {
-    message.textContent = "جارٍ التحقق من الصورة...";
-    resultBox.hidden = false;
-    resultBox.textContent = "";
-
-    const formData = new FormData();
-    
-const reader = new FileReader();
-
-const imageData = await new Promise((resolve, reject) => {
-  reader.onload = () => resolve(reader.result);
-  reader.onerror = () => reject(new Error("تعذرت قراءة الصورة"));
-  reader.readAsDataURL(file);
-});
-
-const imagePayload = {
-  image: imageData,
-  mimeType: file.type || "image/jpeg"
-};
-
-message.textContent = "جارٍ التحقق من الصورة...";
-resultBox.hidden = false;
-resultBox.textContent = "";
-
-const checkResponse = await fetch(
-  `${BEE_API_URL}/api/analyze`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      ...imagePayload,
-      stage: 1
-    })
-  }
-);
-
-const checkResult = await checkResponse.json();
-
-if (!checkResponse.ok || checkResult.isBee !== true) {
-  resultBox.textContent =
-    checkResult.message ||
-    "هذه الصورة لا تبدو صورة خلية نحل. اختاري صورة مناسبة.";
-  message.textContent = "لم يتم قبول الصورة";
-  return;
-}
-
-message.textContent = "تم التحقق من الصورة، جارٍ تحليلها...";
-
-const analysisResponse = await fetch(
-  `${BEE_API_URL}/api/analyze`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      ...imagePayload,
-      stage: 2,
-      v: {
-        category: checkResult.category
-      }
-    })
-  }
-);
-
-const analysisResult = await analysisResponse.json();
-
-if (!analysisResponse.ok) {
-  throw new Error(
-    analysisResult.message ||
-    analysisResult.error ||
-    "تعذر تحليل الصورة"
-  );
-}
-
-resultBox.textContent =
-  typeof analysisResult.analysis === "string"
-    ? analysisResult.analysis
-    : JSON.stringify(analysisResult.analysis, null, 2);
-
-message.textContent = "اكتمل تحليل الصورة.";
-
-  } catch (error) {
-    resultBox.textContent =
-      error.message ||
-      "تعذر الاتصال بخادم التحليل. حاولي مرة أخرى.";
-
-    message.textContent = "تعذر إكمال التحليل.";
-  }
-}
-
-// رفع صورة من الاستوديو
-document.getElementById("pickb")?.addEventListener(
-  "click",
-  () => document.getElementById("pick")?.click()
-);
-
-document.getElementById("pick")?.addEventListener(
-  "change",
-  async (event) => {
-    const file = event.target.files?.[0];
-    if (file) await analyzeBeeImage(file);
-    event.target.value = "";
-  }
-);
+<!-- تم حذف كتلة تحليل إضافية مكررة؛ التطبيق يستخدم askAI/API_URL الموجودين أعلاه. -->
 
 </script>
 </body>
-</html>
+ </html>
